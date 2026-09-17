@@ -1,0 +1,27 @@
+name: Build Splint for Windows
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: List output
+        shell: cmd
+        run: dir build\Splint_artefacts /s /b
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Splint-VST3-Windows
+          path: build/Splint_artefacts/Release/VST3/
+          if-no-files-found: error
