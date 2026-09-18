@@ -3,6 +3,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_dsp/juce_dsp.h>
 #include "Engine.h"
+#include "SpectralReverb.h"
 #include <atomic>
 #include <memory>
 
@@ -31,7 +32,9 @@ struct Voice
     void render (juce::AudioBuffer<float>& out, const juce::AudioBuffer<float>& src, int numSamples);
 };
 
-class SplintProcessor : public juce::AudioProcessor
+class SplintProcessor : public juce::AudioProcessor,
+                        private juce::AudioProcessorValueTreeState::Listener,
+                        private juce::AsyncUpdater
 {
 public:
     SplintProcessor();
@@ -71,6 +74,16 @@ public:
     void setFillHeld (bool v) { fillHeldUi.store (v); }
     void setDecoHeld (int idx, bool v) { if (idx >= 0 && idx < 8) decoHeldUi[(size_t) idx].store (v); }
     std::atomic<double> currentStep { 0.0 };
+    std::atomic<int> selLane { 0 }, selIdx { -1 };
+
+    // правка кусков мышью
+    int  hitCount (int lane);
+    bool getHit (int lane, int idx, splint::Hit& out);
+    void moveHit (int lane, int idx, double newStart);
+    void resizeHit (int lane, int idx, double newLen);
+    void removeHit (int lane, int idx);
+    int  addHit (int lane, double start, double len, double pos);
+    double firstSlice();
     std::atomic<int>    decoFire[8];
     int getSeed() const { return seed; }
     int numSteps() const;
@@ -128,10 +141,13 @@ private:
     long long lastAbsStep = -1;
     juce::Random rnd;
 
+    void parameterChanged (const juce::String& id, float value) override;
+    void handleAsyncUpdate() override;
+    std::atomic<bool> needRegen { false }, needReslice { false };
+
     juce::dsp::StateVariableTPTFilter<float> filter;
-    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> delayLine { 192000 };
-    juce::dsp::IIR::Filter<float> delayHP[2];
-    juce::AudioBuffer<float> voiceBuf;
+    SpectralReverb reverb;
+    juce::AudioBuffer<float> voiceBuf, wetBuf;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SplintProcessor)
 };

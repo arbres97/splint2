@@ -88,6 +88,11 @@ void LaneView::paint (juce::Graphics& g)
                     g.fillRect (x + c, midY - v, 1.0f, juce::jmax (1.0f, v * 2.0f));
                 }
             }
+            if (proc.selLane.load() == lane && proc.selIdx.load() == (int) (&hit - pattern.data()))
+            {
+                g.setColour (juce::Colour (0xffe0286f));
+                g.drawRoundedRectangle (x, 6.0f, bw, h - 20.0f, 3.0f, 2.5f);
+            }
             if (sg.off < 0.001 && bw > 16.0f)
             {
                 juce::String lbl (k + 1);
@@ -100,12 +105,113 @@ void LaneView::paint (juce::Graphics& g)
             }
         }
     }
+    // подсветка морфа: гасим доли, которые сейчас играет другая дорожка
+    const double morph = proc.apvts.getRawParameterValue ("morph")->load();
+    g.setColour (juce::Colour (0xff2a2e35).withAlpha (0.72f));
+    for (int b = 0; b < n / 4; ++b)
+    {
+        const int src = morph <= 0.001 ? 0 : morph >= 0.999 ? 1 : (splint::hash01 (b, 777) < morph ? 1 : 0);
+        if (src != lane) g.fillRect (b * 4 * w, 0.0f, 4 * w, h);
+    }
+
     g.setColour (juce::Colour (0xffe0286f));
     const float px = (float) proc.currentStep.load() * w;
     g.fillRect (px, 0.0f, 2.0f, h);
     g.setColour (juce::Colours::white.withAlpha (0.55f));
     g.setFont (12.0f);
     g.drawText (lane == 0 ? "A" : "B", 6, (int) h - 18, 20, 14, juce::Justification::left);
+}
+
+int LaneView::hitAt (double step, bool& atEdge)
+{
+    auto P = proc.getPattern (lane);
+    const int n = proc.numSteps();
+    const double w = juce::jmax (1.0, (double) getWidth() / n);
+    const double edgeSteps = juce::jmax (0.3, 9.0 / w);
+    atEdge = false;
+    for (int i = (int) P.size() - 1; i >= 0; --i)
+    {
+        const auto& h = P[(size_t) i];
+        const double first = juce::jmin (h.len, (double) n - h.start);
+        if (step >= h.start && step <= h.start + first)
+        {
+            atEdge = (h.len <= first) && (step > h.start + first - edgeSteps);
+            return i;
+        }
+        if (h.len > first)
+        {
+            const double rest = juce::jmin (h.len - first, (double) n);
+            if (step >= 0.0 && step <= rest) { atEdge = step > rest - edgeSteps; return i; }
+        }
+    }
+    return -1;
+}
+
+void LaneView::mouseDown (const juce::MouseEvent& e)
+{
+    const int n = proc.numSteps();
+    const double w = juce::jmax (1.0, (double) getWidth() / n);
+    const double step = e.x / w;
+    bool edge = false;
+    const int found = hitAt (step, edge);
+    dragX = e.x;
+    if (found >= 0)
+    {
+        splint::Hit h;
+        proc.getHit (lane, found, h);
+        proc.selLane.store (lane);
+        proc.selIdx.store (found);
+        origStart = h.start;
+        origLen = h.len;
+        dragMode = edge ? 2 : 1;
+    }
+    else
+    {
+        auto P = proc.getPattern (lane);
+        const double start = std::floor (step);
+        double next = (double) n;
+        for (const auto& h : P) if (h.start > start && h.start < next) next = h.start;
+        const double len = juce::jlimit (1.0, 8.0, next - start);
+        double pos = proc.firstSlice();
+        splint::Hit selected;
+        if (proc.getHit (proc.selLane.load(), proc.selIdx.load(), selected)) pos = selected.pos;
+        const int idx = proc.addHit (lane, start, len, pos);
+        proc.selLane.store (lane);
+        proc.selIdx.store (idx);
+        origStart = start;
+        origLen = len;
+        dragMode = 2;
+    }
+    repaint();
+}
+
+void LaneView::mouseDrag (const juce::MouseEvent& e)
+{
+    if (dragMode == 0) return;
+    const int n = proc.numSteps();
+    const double w = juce::jmax (1.0, (double) getWidth() / n);
+    const double d = (e.x - dragX) / w;
+    const int idx = proc.selIdx.load();
+    if (proc.selLane.load() != lane || idx < 0) return;
+    if (dragMode == 1) proc.moveHit (lane, idx, juce::jlimit (0.0, (double) n - 0.25, std::round (origStart + d)));
+    else proc.resizeHit (lane, idx, juce::jmax (0.25, std::round ((origLen + d) * 4.0) / 4.0));
+    repaint();
+}
+
+void LaneView::mouseUp (const juce::MouseEvent&) { dragMode = 0; }
+
+void LaneView::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    const int n = proc.numSteps();
+    const double w = juce::jmax (1.0, (double) getWidth() / n);
+    bool edge = false;
+    const int found = hitAt (e.x / w, edge);
+    if (found >= 0)
+    {
+        proc.removeHit (lane, found);
+        proc.selIdx.store (-1);
+        repaint();
+    }
 }
 
 //==============================================================================
@@ -135,10 +241,12 @@ SplintEditor::SplintEditor (SplintProcessor& p) : AudioProcessorEditor (&p), pro
     for (auto id : { "style", "bars", "slicemode", "slicecount", "engine", "fig", "figwhere", "figsrc", "figpitch", "figvel", "autofill",
                      "repsize", "replen", "repmode", "glsize", "warpmode", "shiftset", "gaterate" })
         addCombo (id, {});
-    for (auto id : { "morph", "swing", "pitch", "speed", "vol", "cutoff", "res", "drive", "dmix", "dtime", "dfb",
+    for (auto id : { "morph", "swing", "pitch", "speed", "vol", "cutoff", "res", "drive",
+                     "revmix", "revdecay", "revblur", "revshift", "attack", "release",
                      "hits", "air", "mad", "pvar", "chaos", "crushhard" })
         addSlider (id, {});
     addToggle ("mono", juce::String::fromUTF8 ("Моно-глушение"));
+    addToggle ("revfreeze", juce::String::fromUTF8 ("Заморозить ревер"));
     addToggle ("freerun", juce::String::fromUTF8 ("Играть без транспорта"));
 
     for (int i = 0; i < 8; ++i)
@@ -194,7 +302,7 @@ SplintEditor::SplintEditor (SplintProcessor& p) : AudioProcessorEditor (&p), pro
     if (auto* c = dynamic_cast<juce::ComboBox*> (find ("style"))) c->onChange = [this] { juce::Timer::callAfterDelay (10, [this] { proc.regenerate (false); }); };
     if (auto* c = dynamic_cast<juce::ComboBox*> (find ("bars"))) c->onChange = [this] { juce::Timer::callAfterDelay (10, [this] { proc.regenerate (false); }); };
 
-    setSize (1060, 900);
+    setSize (1060, 940);
     startTimerHz (24);
 }
 
@@ -242,6 +350,29 @@ void SplintEditor::addToggle (const char* paramId, const juce::String& name)
     byId.set (paramId, t);
 }
 
+bool SplintEditor::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (const auto& f : files)
+    {
+        const auto ext = juce::File (f).getFileExtension().toLowerCase();
+        if (ext == ".wav" || ext == ".aif" || ext == ".aiff" || ext == ".mp3" || ext == ".flac" || ext == ".ogg") return true;
+    }
+    return false;
+}
+void SplintEditor::fileDragEnter (const juce::StringArray&, int, int) { dragOver = true; repaint(); }
+void SplintEditor::fileDragExit (const juce::StringArray&) { dragOver = false; repaint(); }
+void SplintEditor::filesDropped (const juce::StringArray& files, int, int)
+{
+    dragOver = false;
+    for (const auto& f : files)
+        if (proc.loadSampleFile (juce::File (f)))
+        {
+            sampleLabel.setText (proc.getSampleName(), juce::dontSendNotification);
+            break;
+        }
+    repaint();
+}
+
 void SplintEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff2a2e35));
@@ -254,6 +385,14 @@ void SplintEditor::paint (juce::Graphics& g)
 
     g.setColour (juce::Colours::white.withAlpha (0.35f));
     for (int y : { 294, 486, 612 }) g.fillRect (12, y, getWidth() - 24, 1);
+    if (dragOver)
+    {
+        g.setColour (juce::Colour (0xff2b39f0));
+        g.drawRoundedRectangle (wave.getBounds().toFloat().expanded (3.0f), 6.0f, 3.0f);
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::Font (juce::FontOptions (16.0f)));
+        g.drawText (juce::String::fromUTF8 ("Отпусти файл, чтобы загрузить"), wave.getBounds(), juce::Justification::centred);
+    }
 }
 
 void SplintEditor::resized()
@@ -328,14 +467,18 @@ void SplintEditor::resized()
 
     place ("pitch", 16, 812, 200, 22);
     place ("speed", 232, 812, 200, 22);
-    place ("cutoff", 448, 812, 200, 22);
-    place ("res", 664, 812, 180, 22);
+    place ("attack", 448, 812, 200, 22);
+    place ("release", 664, 812, 180, 22);
     place ("drive", 860, 812, 180, 22);
-    place ("dmix", 16, 856, 200, 22);
-    place ("dtime", 232, 856, 160, 22);
-    place ("dfb", 408, 856, 200, 22);
-    place ("vol", 624, 856, 200, 22);
-    place ("mono", 840, 854, 200, 22);
+    place ("cutoff", 16, 856, 200, 22);
+    place ("res", 232, 856, 200, 22);
+    place ("revmix", 448, 856, 200, 22);
+    place ("revdecay", 664, 856, 180, 22);
+    place ("revblur", 860, 856, 180, 22);
+    place ("revshift", 16, 900, 200, 22);
+    place ("revfreeze", 232, 898, 180, 22);
+    place ("vol", 430, 900, 200, 22);
+    place ("mono", 650, 898, 200, 22);
 
 }
 

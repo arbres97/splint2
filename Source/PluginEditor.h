@@ -26,12 +26,20 @@ class LaneView : public juce::Component
 public:
     LaneView (SplintProcessor& p, int laneIndex) : proc (p), lane (laneIndex) {}
     void paint (juce::Graphics& g) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
 private:
+    int hitAt (double step, bool& atEdge);
     SplintProcessor& proc;
     int lane;
+    int dragMode = 0;      // 0 нет, 1 двигаем, 2 тянем правый край
+    double origStart = 0.0, origLen = 0.0, dragX = 0.0;
 };
 
 class SplintEditor : public juce::AudioProcessorEditor,
+                     public juce::FileDragAndDropTarget,
                      private juce::Timer
 {
 public:
@@ -40,6 +48,10 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void fileDragEnter (const juce::StringArray&, int, int) override;
+    void fileDragExit (const juce::StringArray&) override;
+    void filesDropped (const juce::StringArray& files, int, int) override;
 
 private:
     void timerCallback() override;
@@ -70,6 +82,7 @@ private:
     juce::HashMap<juce::String, juce::Component*> byId;
 
     std::unique_ptr<juce::FileChooser> chooser;
+    bool dragOver = false;
     juce::Component* find (const char* id) { return byId.contains (id) ? byId[id] : nullptr; }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SplintEditor)

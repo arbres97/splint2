@@ -110,6 +110,17 @@ void Voice::render (juce::AudioBuffer<float>& out, const juce::AudioBuffer<float
 }
 
 //==============================================================================
+static juce::AudioParameterFloatAttributes fmt2 (const juce::String& suffix = {})
+{
+    return juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+        [suffix] (float v, int) { return juce::String (v, 2) + suffix; });
+}
+static juce::AudioParameterFloatAttributes fmtInt (const juce::String& suffix = {})
+{
+    return juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+        [suffix] (float v, int) { return juce::String ((int) std::round (v)) + suffix; });
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout SplintProcessor::makeLayout()
 {
     using namespace juce;
@@ -124,25 +135,29 @@ juce::AudioProcessorValueTreeState::ParameterLayout SplintProcessor::makeLayout(
     l.add (std::make_unique<AudioParameterChoice> (pid ("slicecount"), juce::String::fromUTF8 ("Кусков"), StringArray { juce::String::fromUTF8 ("Авто"), "4", "8", "16" }, 0));
     l.add (std::make_unique<AudioParameterChoice> (pid ("engine"), juce::String::fromUTF8 ("Движок"), StringArray { juce::String::fromUTF8 ("Сэмплер"), juce::String::fromUTF8 ("Стретч") }, 0));
 
-    l.add (std::make_unique<AudioParameterFloat> (pid ("morph"), juce::String::fromUTF8 ("Морф A-B"), NormalisableRange<float> (0.0f, 1.0f), 0.0f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("swing"), juce::String::fromUTF8 ("Свинг"), NormalisableRange<float> (50.0f, 75.0f), 56.0f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("pitch"), juce::String::fromUTF8 ("Питч"), NormalisableRange<float> (-24.0f, 24.0f, 1.0f), 0.0f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("speed"), juce::String::fromUTF8 ("Скорость"), NormalisableRange<float> (0.5f, 2.0f), 1.0f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("vol"), juce::String::fromUTF8 ("Громкость"), NormalisableRange<float> (0.0f, 1.0f), 0.8f));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("morph"), juce::String::fromUTF8 ("Морф A-B"), NormalisableRange<float> (0.0f, 1.0f), 0.0f, fmt2()));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("swing"), juce::String::fromUTF8 ("Свинг"), NormalisableRange<float> (50.0f, 75.0f), 56.0f, fmtInt (juce::String::fromUTF8 ("%"))));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("pitch"), juce::String::fromUTF8 ("Питч"), NormalisableRange<float> (-24.0f, 24.0f, 1.0f), 0.0f, fmtInt (juce::String::fromUTF8 (" пт"))));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("speed"), juce::String::fromUTF8 ("Скорость"), NormalisableRange<float> (0.5f, 2.0f), 1.0f, fmt2 ("x")));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("vol"), juce::String::fromUTF8 ("Громкость"), NormalisableRange<float> (0.0f, 1.0f), 0.8f, fmt2()));
     l.add (std::make_unique<AudioParameterBool> (pid ("mono"), juce::String::fromUTF8 ("Моно-глушение"), true));
     l.add (std::make_unique<AudioParameterBool> (pid ("freerun"), juce::String::fromUTF8 ("Играть без транспорта"), false));
 
-    l.add (std::make_unique<AudioParameterFloat> (pid ("cutoff"), juce::String::fromUTF8 ("Фильтр"), NormalisableRange<float> (60.0f, 18000.0f, 1.0f, 0.3f), 18000.0f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("res"), juce::String::fromUTF8 ("Резонанс"), NormalisableRange<float> (0.0f, 1.0f), 0.1f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("drive"), juce::String::fromUTF8 ("Драйв"), NormalisableRange<float> (0.0f, 1.0f), 0.0f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("dmix"), juce::String::fromUTF8 ("Эхо"), NormalisableRange<float> (0.0f, 1.0f), 0.12f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("dtime"), juce::String::fromUTF8 ("Время эха"), NormalisableRange<float> (1.0f, 8.0f, 1.0f), 3.0f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("dfb"), juce::String::fromUTF8 ("Повторы эха"), NormalisableRange<float> (0.0f, 0.9f), 0.3f));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("cutoff"), juce::String::fromUTF8 ("Фильтр"), NormalisableRange<float> (60.0f, 18000.0f, 1.0f, 0.3f), 18000.0f, fmtInt (juce::String::fromUTF8 (" Гц"))));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("res"), juce::String::fromUTF8 ("Резонанс"), NormalisableRange<float> (0.0f, 1.0f), 0.1f, fmt2()));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("drive"), juce::String::fromUTF8 ("Драйв"), NormalisableRange<float> (0.0f, 1.0f), 0.0f, fmt2()));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("revmix"), juce::String::fromUTF8 ("Ревер"), NormalisableRange<float> (0.0f, 1.0f), 0.15f, fmt2()));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("revdecay"), juce::String::fromUTF8 ("Хвост"), NormalisableRange<float> (0.0f, 1.0f), 0.6f, fmt2()));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("revblur"), juce::String::fromUTF8 ("Размазать"), NormalisableRange<float> (0.0f, 1.0f), 0.3f, fmt2()));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("revshift"), juce::String::fromUTF8 ("Сдвиг спектра"), NormalisableRange<float> (-12.0f, 12.0f, 1.0f), 0.0f, fmtInt (juce::String::fromUTF8 (" пт"))));
+    l.add (std::make_unique<AudioParameterBool> (pid ("revfreeze"), juce::String::fromUTF8 ("Заморозить"), false));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("attack"), juce::String::fromUTF8 ("Атака"), NormalisableRange<float> (0.5f, 60.0f, 0.5f), 4.0f, fmt2 (juce::String::fromUTF8 (" мс"))));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("release"), juce::String::fromUTF8 ("Спад"), NormalisableRange<float> (2.0f, 120.0f, 0.5f), 14.0f, fmt2 (juce::String::fromUTF8 (" мс"))));
 
-    l.add (std::make_unique<AudioParameterFloat> (pid ("hits"), juce::String::fromUTF8 ("Кусков в такте"), NormalisableRange<float> (1.0f, 10.0f, 1.0f), 4.0f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("air"), juce::String::fromUTF8 ("Паузы"), NormalisableRange<float> (0.0f, 1.0f), 0.15f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("mad"), juce::String::fromUTF8 ("Безумие"), NormalisableRange<float> (0.0f, 1.0f), 0.12f));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("pvar"), juce::String::fromUTF8 ("Питч-вариации"), NormalisableRange<float> (0.0f, 1.0f), 0.0f));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("hits"), juce::String::fromUTF8 ("Кусков в такте"), NormalisableRange<float> (1.0f, 10.0f, 1.0f), 4.0f, fmtInt()));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("air"), juce::String::fromUTF8 ("Паузы"), NormalisableRange<float> (0.0f, 1.0f), 0.15f, fmt2()));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("mad"), juce::String::fromUTF8 ("Безумие"), NormalisableRange<float> (0.0f, 1.0f), 0.12f, fmt2()));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("pvar"), juce::String::fromUTF8 ("Питч-вариации"), NormalisableRange<float> (0.0f, 1.0f), 0.0f, fmt2()));
 
     StringArray figNames;
     for (int i = 0; i < 12; ++i) figNames.add (String::fromUTF8 (figureName ((FigKind) i)));
@@ -153,14 +168,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout SplintProcessor::makeLayout(
     l.add (std::make_unique<AudioParameterChoice> (pid ("figvel"), juce::String::fromUTF8 ("Громкость фигуры"), StringArray { juce::String::fromUTF8 ("Ровно"), juce::String::fromUTF8 ("Нарастание"), juce::String::fromUTF8 ("Спад") }, 0));
     l.add (std::make_unique<AudioParameterChoice> (pid ("autofill"), juce::String::fromUTF8 ("Авто-филл"), StringArray { juce::String::fromUTF8 ("Выкл"), juce::String::fromUTF8 ("Каждый круг"), juce::String::fromUTF8 ("Каждый 2-й"), juce::String::fromUTF8 ("Каждый 4-й") }, 0));
 
-    l.add (std::make_unique<AudioParameterFloat> (pid ("chaos"), juce::String::fromUTF8 ("Хаос"), NormalisableRange<float> (0.0f, 2.0f), 1.0f));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("chaos"), juce::String::fromUTF8 ("Хаос"), NormalisableRange<float> (0.0f, 2.0f), 1.0f, fmt2()));
     for (int i = 0; i < 8; ++i)
     {
         l.add (std::make_unique<AudioParameterBool> (pid ((juce::String ("on_") + kDecoIds[i]).toRawUTF8()),
                                                      juce::String::fromUTF8 (kDecoNames[i]), false));
         l.add (std::make_unique<AudioParameterFloat> (pid ((juce::String ("amt_") + kDecoIds[i]).toRawUTF8()),
                                                       juce::String::fromUTF8 (kDecoNames[i]) + juce::String::fromUTF8 (" сила"),
-                                                      NormalisableRange<float> (0.0f, 1.0f), 0.35f));
+                                                      NormalisableRange<float> (0.0f, 1.0f), 0.35f, fmt2()));
     }
     l.add (std::make_unique<AudioParameterChoice> (pid ("repsize"), juce::String::fromUTF8 ("Размер битрипита"), StringArray { "1/4", "1/8", "1/16", "1/32" }, 2));
     l.add (std::make_unique<AudioParameterChoice> (pid ("replen"), juce::String::fromUTF8 ("Длина битрипита"), StringArray { "2/16", "4/16", "8/16" }, 1));
@@ -169,7 +184,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SplintProcessor::makeLayout(
     l.add (std::make_unique<AudioParameterChoice> (pid ("warpmode"), juce::String::fromUTF8 ("Тип варпа"), StringArray { juce::String::fromUTF8 ("Всё"), juce::String::fromUTF8 ("Стоп"), juce::String::fromUTF8 ("Раскрутка"), juce::String::fromUTF8 ("Плавание") }, 0));
     l.add (std::make_unique<AudioParameterChoice> (pid ("shiftset"), juce::String::fromUTF8 ("Интервалы сдвига"), StringArray { juce::String::fromUTF8 ("Октавы"), juce::String::fromUTF8 ("Квинты"), juce::String::fromUTF8 ("Полутона") }, 0));
     l.add (std::make_unique<AudioParameterChoice> (pid ("gaterate"), juce::String::fromUTF8 ("Шаг гейта"), StringArray { "1/16", juce::String::fromUTF8 ("Триоли"), "1/32", "1/64" }, 2));
-    l.add (std::make_unique<AudioParameterFloat> (pid ("crushhard"), juce::String::fromUTF8 ("Жёсткость краша"), NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+    l.add (std::make_unique<AudioParameterFloat> (pid ("crushhard"), juce::String::fromUTF8 ("Жёсткость краша"), NormalisableRange<float> (0.0f, 1.0f), 0.5f, fmt2()));
     return l;
 }
 
@@ -179,9 +194,25 @@ SplintProcessor::SplintProcessor()
       apvts (*this, nullptr, "SPLINT", makeLayout())
 {
     formats.registerBasicFormats();
+    for (auto* pid : { "hits", "air", "mad", "pvar", "style", "bars", "fig", "figwhere", "figsrc", "figpitch", "figvel",
+                       "slicemode", "slicecount" })
+        apvts.addParameterListener (pid, this);
     for (auto& a : decoHeldUi) a.store (false);
     for (auto& a : decoFire) a.store (0);
     makeDemoSample();
+}
+
+void SplintProcessor::parameterChanged (const juce::String& id, float)
+{
+    if (id == "slicemode" || id == "slicecount") needReslice.store (true);
+    else needRegen.store (true);
+    triggerAsyncUpdate();
+}
+
+void SplintProcessor::handleAsyncUpdate()
+{
+    if (needReslice.exchange (false)) { needRegen.store (false); reslice(); return; }
+    if (needRegen.exchange (false)) regenerate (false);
 }
 
 bool SplintProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -196,15 +227,10 @@ void SplintProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) samplesPerBlock, 2 };
     filter.prepare (spec);
     filter.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
-    delayLine.prepare (spec);
-    delayLine.setMaximumDelayInSamples ((int) (sampleRate * 3.0));
-    delayLine.reset();
-    for (auto& f : delayHP)
-    {
-        f.prepare ({ sampleRate, (juce::uint32) samplesPerBlock, 1 });
-        f.coefficients = juce::dsp::IIR::Coefficients<float>::makeHighPass (sampleRate, 250.0f);
-    }
+    reverb.prepare (sampleRate);
+    reverb.reset();
     voiceBuf.setSize (2, juce::jmax (64, samplesPerBlock));
+    wetBuf.setSize (2, juce::jmax (64, samplesPerBlock));
     for (auto& v : voices) v.active = false;
     rep = RepState();
     fill = FillState();
@@ -310,8 +336,10 @@ void SplintProcessor::spawnVoice (const splint::Hit& h, int offset, int lengthSa
         v->crushHold = (int) std::round (2.0 + hard * 14.0);
         v->crushQ = (float) std::pow (2.0, std::round (8.0 - hard * 5.0) - 1.0);
     }
-    v->fadeIn = juce::jmin (juce::jmax (16, lengthSamples / 8), (int) (sr * 0.004));
-    v->fadeOut = juce::jmin (juce::jmax (32, lengthSamples / 4), (int) (sr * 0.012));
+    const int attS = (int) (sr * valOf ("attack") * 0.001);
+    const int relS = (int) (sr * valOf ("release") * 0.001);
+    v->fadeIn = juce::jlimit (8, juce::jmax (16, lengthSamples / 3), attS);
+    v->fadeOut = juce::jlimit (16, juce::jmax (32, lengthSamples / 3), relS);
 
     if (numLastVoices < 8) lastVoiceIds[numLastVoices++] = v->id;
 }
@@ -616,13 +644,11 @@ void SplintProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     // эффекты
     filter.setCutoffFrequency (juce::jlimit (40.0f, (float) (sr * 0.45), valOf ("cutoff")));
     filter.setResonance (juce::jlimit (0.1f, 8.0f, 0.7f + valOf ("res") * 7.0f));
-    delayLine.setDelay ((float) juce::jlimit (32.0, sr * 2.5, valOf ("dtime") * samplesPerStep));
 
     const float drive = valOf ("drive");
     const float driveK = 1.0f + drive * 20.0f;
     const float dryG = 1.0f - drive * 0.3f;
-    const float wet = valOf ("dmix");
-    const float fb = valOf ("dfb");
+    const float wet = valOf ("revmix");
     const float vol = valOf ("vol");
 
     float* outL = buffer.getWritePointer (0);
@@ -630,6 +656,9 @@ void SplintProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     const float* vL = voiceBuf.getReadPointer (0);
     const float* vR = voiceBuf.getReadPointer (1);
 
+    wetBuf.setSize (2, juce::jmax (numSamples, 64), false, false, true);
+    float* dryL = voiceBuf.getWritePointer (0);
+    float* dryR = voiceBuf.getWritePointer (1);
     for (int i = 0; i < numSamples; ++i)
     {
         float l = vL[i], r = vR[i];
@@ -639,18 +668,17 @@ void SplintProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             l = std::tanh (l * driveK) / norm;
             r = std::tanh (r * driveK) / norm;
         }
-        l = filter.processSample (0, l);
-        r = filter.processSample (1, r);
-
-        float dl = delayLine.popSample (0);
-        float dr = delayLine.popSample (1);
-        dl = delayHP[0].processSample (dl);
-        dr = delayHP[1].processSample (dr);
-        delayLine.pushSample (0, l + dl * fb);
-        delayLine.pushSample (1, r + dr * fb);
-
-        float oL = l * dryG + dl * wet;
-        float oR = r * dryG + dr * wet;
+        dryL[i] = filter.processSample (0, l);
+        dryR[i] = filter.processSample (1, r);
+    }
+    reverb.process (dryL, dryR, numSamples, valOf ("revdecay"), valOf ("revblur"), valOf ("revshift"),
+                    boolOf ("revfreeze"), wetBuf.getWritePointer (0), wetBuf.getWritePointer (1));
+    const float* wL = wetBuf.getReadPointer (0);
+    const float* wR = wetBuf.getReadPointer (1);
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float oL = dryL[i] * dryG + wL[i] * wet * 1.4f;
+        float oR = dryR[i] * dryG + wR[i] * wet * 1.4f;
         oL = std::tanh (oL * 1.1f) * vol;
         oR = std::tanh (oR * 1.1f) * vol;
         outL[i] = oL;
@@ -864,6 +892,57 @@ void SplintProcessor::insertFigure (int lane)
     }
     for (auto& h : figure) keep.push_back (h);
     P = keep;
+}
+
+int SplintProcessor::hitCount (int lane)
+{
+    const juce::SpinLock::ScopedLockType lock (dataLock);
+    return (int) patterns[juce::jlimit (0, 1, lane)].size();
+}
+bool SplintProcessor::getHit (int lane, int idx, splint::Hit& out)
+{
+    const juce::SpinLock::ScopedLockType lock (dataLock);
+    auto& P = patterns[juce::jlimit (0, 1, lane)];
+    if (idx < 0 || idx >= (int) P.size()) return false;
+    out = P[(size_t) idx];
+    return true;
+}
+void SplintProcessor::moveHit (int lane, int idx, double newStart)
+{
+    const juce::SpinLock::ScopedLockType lock (dataLock);
+    auto& P = patterns[juce::jlimit (0, 1, lane)];
+    if (idx < 0 || idx >= (int) P.size()) return;
+    P[(size_t) idx].start = juce::jlimit (0.0, (double) numSteps() - 0.25, newStart);
+}
+void SplintProcessor::resizeHit (int lane, int idx, double newLen)
+{
+    const juce::SpinLock::ScopedLockType lock (dataLock);
+    auto& P = patterns[juce::jlimit (0, 1, lane)];
+    if (idx < 0 || idx >= (int) P.size()) return;
+    P[(size_t) idx].len = juce::jlimit (0.25, (double) numSteps(), newLen);
+}
+void SplintProcessor::removeHit (int lane, int idx)
+{
+    const juce::SpinLock::ScopedLockType lock (dataLock);
+    auto& P = patterns[juce::jlimit (0, 1, lane)];
+    if (idx < 0 || idx >= (int) P.size()) return;
+    P.erase (P.begin() + idx);
+}
+int SplintProcessor::addHit (int lane, double start, double len, double pos)
+{
+    const juce::SpinLock::ScopedLockType lock (dataLock);
+    auto& P = patterns[juce::jlimit (0, 1, lane)];
+    splint::Hit h;
+    h.start = juce::jlimit (0.0, (double) numSteps() - 0.25, start);
+    h.len = juce::jlimit (0.25, (double) numSteps(), len);
+    h.pos = juce::jlimit (0.0, 0.999, pos);
+    P.push_back (h);
+    return (int) P.size() - 1;
+}
+double SplintProcessor::firstSlice()
+{
+    const juce::SpinLock::ScopedLockType lock (dataLock);
+    return slices.empty() ? 0.0 : slices[0];
 }
 
 std::vector<float> SplintProcessor::getPeaks()
